@@ -1,0 +1,1 @@
+bucket = "your-gcp-sandbox-gcs-tfstate-dev"

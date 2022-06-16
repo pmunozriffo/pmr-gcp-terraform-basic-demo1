@@ -1,0 +1,58 @@
+substitutions:
+    _APPLY_CHANGES: 'false'
+    _ENV: 'undefined'
+steps:
+- id: 'context'
+  name: 'alpine'
+  entrypoint: 'sh'
+  args:
+  - '-c'
+  - |
+      echo "***********************"
+      echo "project           : $PROJECT_ID"
+      echo "pattern/use_case  : ${_DI}"
+      echo "branch            : $BRANCH_NAME"
+      echo "env               : ${_ENV}"
+      echo "default_location  : ${_DEFAULT_LOCATION}"
+      echo "default_region    : ${_DEFAULT_REGION}"
+      echo "appengine_region  : ${_APPENGINE_REGION}"
+      echo "mode              : $([[ ${_APPLY_CHANGES} = 'true' ]] && echo 'LIVE' || echo 'DRY RUN')"
+      echo "***********************"
+
+- id: 'terraform init'
+  name: 'hashicorp/terraform:1.2.1'
+  entrypoint: 'sh'
+  args:
+  - '-c'
+  - |
+      TF_IN_AUTOMATION=1 terraform init -input=false -no-color -upgrade -backend-config=environments/backend-${_ENV}.tfvars 
+
+- id: 'terraform plan'
+  name: 'hashicorp/terraform:1.2.1'
+  entrypoint: 'sh'
+  args:
+  - '-c'
+  - |
+      export TF_VAR_project_id=$PROJECT_ID
+      export TF_VAR_env=${_ENV}
+      export TF_VAR_default_location=${_DEFAULT_LOCATION}
+      export TF_VAR_default_region=${_DEFAULT_REGION}
+      export TF_VAR_appengine_region=${_APPENGINE_REGION}
+      TF_IN_AUTOMATION=1 terraform plan -var-file=environments/${_ENV}.tfvars -out changes.tfplan
+
+- id: 'terraform apply'
+  name: 'hashicorp/terraform:1.2.1'
+  entrypoint: 'sh'
+  args:
+  - '-c'
+  - |
+      if [ "${_APPLY_CHANGES}" = 'true' ]; then
+        echo "*****************************************"
+        echo "Applying changes on live environment"
+        echo "*****************************************"
+        TF_IN_AUTOMATION=1 terraform apply -input=false -no-color -auto-approve changes.tfplan
+      else
+        echo "*****************************************"
+        echo "Skipping apply (DRY RUN)"
+        echo "*****************************************"
+      fi
